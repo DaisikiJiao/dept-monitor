@@ -29,9 +29,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class DeptDataServiceImpl implements DeptDataService {
 
-    private static String BINANCE_DEPT_URL = BinanceApiConstant.HOST + BinanceApiConstant.DEPT;
-    private static String OKEX_DEPT_URL = OkexApiConstant.HOST + OkexApiConstant.DEPT;
-
     private static Map<String, Set<OrderDTO>> REALTIME_BIG_ORDER_MAP = new ConcurrentHashMap<>();
 
     @Async
@@ -39,7 +36,7 @@ public class DeptDataServiceImpl implements DeptDataService {
     public void invokeRealtimeDeptData(BaseExchangeDeptBO exchangeDept) {
         BaseDeptDTO deptData = invokeExchangeDeptData(exchangeDept);
         log.debug("Received " + exchangeDept.getSymbol() + " dept data:{}", exchangeDept);
-        exportRealtimeBigOrderData2Excel(deptData, exchangeDept.getThreshold());
+        if (deptData!=null) exportRealtimeBigOrderData2Excel(deptData, exchangeDept.getThreshold());
     }
 
     @Async
@@ -47,7 +44,7 @@ public class DeptDataServiceImpl implements DeptDataService {
     public void invokeSnapshotDeptData(BaseExchangeDeptBO exchangeDept) {
         BaseDeptDTO deptData = invokeExchangeDeptData(exchangeDept);
         log.debug("Received " + exchangeDept.getSymbol() + " dept data:{}", exchangeDept);
-        exportSnapshotBigOrderData2Excel(deptData, exchangeDept.getThreshold());
+        if (deptData!=null) exportSnapshotBigOrderData2Excel(deptData, exchangeDept.getThreshold());
     }
 
     private BaseDeptDTO invokeExchangeDeptData(BaseExchangeDeptBO exchangeDept) {
@@ -66,6 +63,7 @@ public class DeptDataServiceImpl implements DeptDataService {
         params.put("symbol", symbol);
         params.put("limit", limit);
 
+        String BINANCE_DEPT_URL = BinanceApiConstant.HOST + BinanceApiConstant.DEPT;
         String result = HttpUtil.get(BINANCE_DEPT_URL, params);
         BinanceDeptDTO binanceDeptData = JSON.parseObject(result, new TypeReference<BinanceDeptDTO>(){});
         binanceDeptData.setExchange(ExchangeConstant.BINANCE);
@@ -75,11 +73,12 @@ public class DeptDataServiceImpl implements DeptDataService {
     }
 
     private OkexDeptDTO invokeOkexDeptData(String symbol, String size, String depth) {
-        String url = OKEX_DEPT_URL.replace("<instrument_id>", symbol);
         Map<String, Object> params = new HashMap<>();
         params.put("size", size);
         params.put("depth", depth);
 
+        String OKEX_DEPT_URL = OkexApiConstant.HOST + OkexApiConstant.DEPT;
+        String url = OKEX_DEPT_URL.replace("<instrument_id>", symbol);
         String result = HttpUtil.get(url, params);
         OkexDeptDTO okexDeptData = JSON.parseObject(result, new TypeReference<OkexDeptDTO>(){});
         okexDeptData.setExchange(ExchangeConstant.OKEX);
@@ -139,11 +138,11 @@ public class DeptDataServiceImpl implements DeptDataService {
                 excelWriter.setCurrentRowToEnd();
                 excelWriter.write(exportBigOrders, false);
             } else {
-                excelWriter.merge(4, title);
+                excelWriter.merge(3, title);
                 excelWriter.addHeaderAlias("position", "方向");
                 excelWriter.addHeaderAlias("price", "价格");
                 excelWriter.addHeaderAlias("amount", "数量");
-                excelWriter.addHeaderAlias("startTime", "开始时间");
+                excelWriter.addHeaderAlias("startTime", "快照时间");
                 excelWriter.write(exportBigOrders, true);
             }
             excelWriter.close();
@@ -160,8 +159,7 @@ public class DeptDataServiceImpl implements DeptDataService {
             long startTime = deptData.getTimestamp().getTime();
 
             if (amount.compareTo(BigDecimal.valueOf(threshold)) > -1) {
-                OrderDTO bigOrder = OrderDTO.builder().position(1).price(price).amount(amount).startTime(startTime).build();
-                if (!bigOrders.contains(bigOrder)) bigOrders.add(bigOrder);
+                bigOrders.add(OrderDTO.builder().position(1).price(price).amount(amount).startTime(startTime).build());
             }
         }
 
@@ -172,7 +170,7 @@ public class DeptDataServiceImpl implements DeptDataService {
 
             if (amount.compareTo(BigDecimal.valueOf(threshold)) > -1) {
                 OrderDTO bigOrder = OrderDTO.builder().position(-1).price(price).amount(amount).startTime(startTime).build();
-                if (!bigOrders.contains(bigOrder)) bigOrders.add(bigOrder);
+                bigOrders.add(bigOrder);
             }
         }
     }
@@ -209,8 +207,7 @@ public class DeptDataServiceImpl implements DeptDataService {
             long startTime = deptData.getTimestamp().getTime();
 
             OrderDTO order = OrderDTO.builder().position(1).price(price).amount(amount).startTime(startTime).build();
-            orderList.add(order);
-        }
+            orderList.add(order);        }
 
         for (List<String> ask : asks) {
             BigDecimal price = BigDecimal.valueOf(Double.parseDouble(ask.get(0)));
